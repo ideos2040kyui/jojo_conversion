@@ -14,7 +14,9 @@ import pytorch_lightning as pl
 from torchinfo import summary
 
 import wandb
-wandb.init(project="Swallow_jojo_tuning")
+wandb.init(project="SwallowLoRA_jojo_tuning")
+
+from peft import get_peft_model, LoraConfig, TaskType
 
 # 乱数シード設定
 def set_seed(seed):
@@ -149,12 +151,32 @@ class LLMTrainer(pl.LightningModule):
             trust_remote_code=True,
             torch_dtype=torch.bfloat16,
         )
+
+        lora_config = LoraConfig(
+            r=8,
+            lora_alpha=32,
+            target_modules=[
+                "q_proj",
+                # "k_proj",
+                "v_proj",
+                # "o_proj",
+                # "gate_proj",
+                # "up_proj",
+                # "down_proj",
+                # "lm_head",
+            ],
+            bias="none",
+            fan_in_fan_out=False,
+            lora_dropout=0.05,
+            task_type="CAUSAL_LM",
+        )
+        self.model = get_peft_model(self.model, lora_config)
+        self.model.print_trainable_parameters()
+
         self.tokenizer = AutoTokenizer.from_pretrained("tokyotech-llm/Swallow-7b-instruct-hf")
         self.tokenizer.add_special_tokens({'pad_token': '<|padding|>'})
-
         self.lr = lr
         self.training_step_outputs = []
-
 
     def forward(self, input_ids, attention_mask, labels=None):
         output = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
@@ -210,7 +232,7 @@ def main():
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath="checkpoints_pl",
-        filename="bestloss_Swallow_jojo-{epoch:02d}-{train_loss:.2f}-"+date,
+        filename="bestloss_SwallowLoRA_jojo-{epoch:02d}-{train_loss:.2f}-"+date,
         monitor="train_loss",  
         save_last=True,
         save_weights_only=True,
@@ -222,6 +244,13 @@ def main():
 
     trainer = pl.Trainer(accelerator="gpu", max_epochs=num_epochs, callbacks=[checkpoint_callback])
     trainer.fit(LLM_Module, data_module)
+
+    checkpoint_path = checkpoint_callback.best_model_path
+    tokenizer = AutoTokenizer.from_pretrained("tokyotech-llm/Swallow-7b-instruct-hf")
+    tokenizer.add_special_tokens({'pad_token': '<|padding|>'})
+
+    checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage)
+    LLM_Module.load_state_dict(checkpoint['state_dict'])
 
 if __name__ == "__main__":
     main()

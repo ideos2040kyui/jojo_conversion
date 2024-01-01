@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchinfo import summary
 from transformers import AdamW
-from transformers import AutoTokenizer, LlamaTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import pytorch_lightning as pl
 
 import streamlit as st
@@ -75,6 +75,7 @@ class LLMTrainer(pl.LightningModule):
 
 @st.cache_resource
 def load_model():
+    
     LLM_Module = LLMTrainer().to(DEVICE)
 
     checkpoint_path = BEST_PATH
